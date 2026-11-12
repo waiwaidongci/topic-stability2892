@@ -1,5 +1,7 @@
 -- metadata initializes corpora, token_documents, topic_runs, topic_profiles,
--- editorial_notes and users/audit. Natural keys corpus.name,
--- (corpus_id,reference), (run_id,topic_index). TopicProfile.mean_similarity
--- uses MySQL DOUBLE; complete matrices/word weights are JSON doubles.
+-- editorial_notes, topic_comparisons and users/audit. Natural keys corpus.name,
+-- (corpus_id,reference), (run_id,topic_index), (run_a_id,run_b_id).
+-- TopicProfile.mean_similarity uses MySQL DOUBLE; complete matrices/word weights
+-- are JSON doubles. topic_comparisons stores the rule_version and threshold used;
+-- a rule_version mismatch marks the saved conclusion stale until recomputed.
 -- Plan production schema migrations explicitly.

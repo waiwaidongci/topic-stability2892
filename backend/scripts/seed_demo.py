@@ -33,5 +33,12 @@ def seed():
    for p in result['profiles']:
     obj=TopicProfile(run_id=run.id,topic_index=p['topic_index'],label=p['label'],weights=p['weights'],mean_similarity=p['mean_similarity']);db.add(obj);db.flush();profiles.append(obj)
    db.add(EditorialNote(run_id=run.id,name='混合展签主题编辑草案',profile_ids=[profiles[0].id],profile_snapshot=[row(profiles[0])],interpretation='词权和相对激活仅作编辑线索，主题需人工命名；初始化稳定不等于语义真值。',next_step='阅读代表文档并与策展编辑核对，再安排展签改稿。',creator_id=admin.id));db.add(AuditLog(actor='seed',action='demo.created',detail={'documents':360,'seed':221}));db.commit()
+  # 第二批：改用 K=3 并换 seed，主题数与编号顺序都与首批不同，供跨批次对齐对比演示。
+  if not db.scalar(select(TopicRun).where(TopicRun.name=='三主题跨批复核')):
+   config2={'k':3,'repeats':5,'seed':441,'min_df':2,'max_iter':2000,'tolerance':.0001}
+   result2=analyze(row(corpus),list_documents(db,corpus.id),config2)
+   run2=TopicRun(corpus_id=corpus.id,name='三主题跨批复核',config=config2,result=result2,status='succeeded',creator_id=admin.id);db.add(run2);db.flush()
+   for p in result2['profiles']:db.add(TopicProfile(run_id=run2.id,topic_index=p['topic_index'],label=p['label'],weights=p['weights'],mean_similarity=p['mean_similarity']))
+   db.add(AuditLog(actor='seed',action='demo.created',detail={'documents':360,'seed':441,'purpose':'cross-batch comparison'}));db.commit()
   counts={t.__tablename__:db.scalar(select(func.count()).select_from(t)) for t in [User,Corpus,TokenDocument,TopicRun,TopicProfile,EditorialNote]};print(json.dumps(counts));return counts
 if __name__=='__main__':seed()

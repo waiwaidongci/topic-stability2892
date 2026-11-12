@@ -33,6 +33,7 @@ docker compose exec -T backend python -m scripts.seed_demo
 7. 在“编辑审阅”选择主题、写解释和后续核对行动，创建编辑说明。说明冻结所选主题的名称、词权、相似度快照。
 8. 负责人 admin 阅读后确认或退回。viewer 只能下载已确认说明 CSV。后续修改实时主题名不会改写已经审阅的快照。
 9. 在“成册留痕”核对导入、任务、命名、说明、审批与导出审计；每个请求携带 X-Request-ID。
+10. 在“批次对比”选择两个成功任务（词表、主题数、编号均可不同），按实际词项并集对齐词权，设定匹配门槛后得到全局一对一匹配、双方未匹配主题与差异词。规则版本升级后历史结论标记失效，需重算再用于编辑判断。
 
 ## 数值口径
 
@@ -43,13 +44,16 @@ docker compose exec -T backend python -m scripts.seed_demo
 - 归一 H 通过 L2 余弦与 Hungarian 一对一最优匹配。平均稳定性只统计非参考重复，避免把参考自身的 1 加入均值。相似度量化初始化敏感性，不等于语义真值；相近或简并主题的匹配可能不唯一。
 - 文档展示 W 与 `W_i/sum(W_i)` 的相对激活。这是归一后的模型强度，不是概率后验。H 词权也不是词义置信度。
 - 有限非负矩阵、K 不超文档数/词数且不超数值秩（绝对容差 1e-10）。常量/低秩、空词汇、空主题与未收敛均明确失败。不同 K、词汇、min_df 的误差不直接比较语义质量。
+- 跨批次对比只接受两个成功任务：取两批参照分解（第0次拟合）H 行，按实际出现词项的并集重放到同一坐标，缺词补 0 后重新 L1 归一；在该向量上计算 L2 余弦，再用 Hungarian 求全局一对一最优，最后按编辑可调门槛截断。低于门槛的候选不硬配，双方主题都保留为未匹配，并单列“被门槛拒绝的候选”。门槛默认 0.35、可调 0–0.95；主题数不同则多余主题天然进入未匹配。
+- 对比结论带 `rule_version` 与门槛落库（`topic_comparisons`，自然键为升序任务对）。对齐口径、相似度定义、匹配算法或门槛语义任何变化都升级规则版本；读取时旧结论标记 `stale`，再次提交或显式刷新即按当前口径覆盖重算，不把旧匹配当现结论。匹配依据展示双方高词权词、共享词词权差与仅一侧出现的差异词。
+- 跨批余弦衡量的是词权分布在共享/并集词项上的重合程度，不是语义正确率，也不比较两批重建误差；人工主题名随结果保留展示但不参与任何数值计算。
 - MySQL 使用 DOUBLE，SQLAlchemy 设置 `asdecimal=False`，避免默认 Decimal 结果的十位小数转换损失；API 测试将持久化主题均值与逐次余弦重新计算比较到 1e-12。
 
 ## 结构
 
-75 个有职责的 Python/TypeScript/Vue/CSS 源文件（不含空包、依赖和编译产物）。六个业务页面为研究首页、分词语料、主题配置、词权与稳定、编辑审阅、成册留痕。五个业务实体 Corpus → TokenDocument → TopicRun → TopicProfile → EditorialNote，另有 User/AuditLog。路由、schema、服务、ORM、前端 API/store 和页面形成完整链路。
+91 个有职责的 Python/TypeScript/Vue/CSS 源文件（不含空包、依赖和编译产物）。七个业务页面为研究首页、分词语料、主题配置、词权与稳定、批次对比、编辑审阅、成册留痕。五个业务实体 Corpus → TokenDocument → TopicRun → TopicProfile → EditorialNote，另有跨批次的 TopicComparison 以及 User/AuditLog。路由、schema、服务、ORM、前端 API/store 和页面形成完整链路。
 
-后端枚举位于 `src/constants/enums.py`，前端对应 `src/constants/enums.ts`。RequestID 与 Error 两个中间件统一请求追踪和错误边界。TopicTerms、RunSummary、RunTable、AlignmentGrid 和 common 组件复用真实接口数据。Celery 的结果持久化后由前端轮询刷新。审阅前冻结主题快照以保持批准结果的可复查性。
+后端枚举位于 `src/constants/enums.py`，前端对应 `src/constants/enums.ts`；跨批对比的规则版本与门槛常量在 `src/constants/comparison.py`（前端默认门槛对应 `src/constants/comparison.ts`）。RequestID 与 Error 两个中间件统一请求追踪和错误边界。TopicTerms、RunSummary、RunTable、AlignmentGrid 和 common 组件复用真实接口数据。Celery 的结果持久化后由前端轮询刷新。审阅前冻结主题快照以保持批准结果的可复查性。
 
 ## 验证与边界
 
